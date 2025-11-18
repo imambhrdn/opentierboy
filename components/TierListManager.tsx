@@ -3,12 +3,12 @@
 import React, {useCallback, useEffect, useMemo, useRef, useState} from 'react';
 import DragDropTierList from './DragDropTierList';
 import {TierContext} from '@/contexts/TierContext';
-import TierTemplateSelector from "@/components/TierTemplateSelector";
 import EditableLabel from "@/components/EditableLabel";
 import ItemManager from "@/components/ItemManager";
 import Tier, {LabelPosition} from "@/models/Tier";
 import Item from "@/models/Item";
 import ShareButton from "@/components/ShareButton";
+import QuickDownloadButton from "@/components/QuickDownloadButton";
 import {TierCortex, TierWithSimplifiedItems} from "@/lib/TierCortex";
 import {usePathname, useRouter, useSearchParams} from "next/navigation";
 import {ItemSet} from "@/models/ItemSet";
@@ -51,9 +51,11 @@ const TierListManager: React.FC<TierListManagerProps> = ({initialItemSet, initia
       setName(decodedState.title);
     }
 
-    // Updated label positions
+    // Updated label positions and map simplified tier properties
     const updatedTiers = decodedState.tiers.map(tier => ({
-      ...tier,
+      id: tier.i,
+      name: tier.n,
+      items: tier.t.map(item => tierCortex.getOgSafeItem(item)),
       labelPosition
     }));
 
@@ -69,11 +71,12 @@ const TierListManager: React.FC<TierListManagerProps> = ({initialItemSet, initia
       ...tier,
       items: tier.items.map(item => ({
         i: item.id,
-        c: tierCortex.isCustomItem(item.id) ? item.content : undefined
+        c: tierCortex.isCustomItem(item.id) ? item.content : undefined,
+        u: tierCortex.isCustomItem(item.id) ? item.imageUrl : undefined
       }))
     }));
 
-    router.push(`${pathname}?state=${TierCortex.encodeTierStateForURL(name, optimizedTiersForEncoding)}`, {scroll: false});
+    router.push(`${pathname}?state=${tierCortex.encodeTierStateForURL(name, optimizedTiersForEncoding)}`, {scroll: false});
   }, [router, pathname, name, tierCortex]);
 
   useEffect(() => {
@@ -115,43 +118,7 @@ const TierListManager: React.FC<TierListManagerProps> = ({initialItemSet, initia
     handleTiersUpdate(updatedTiers);
   }, [tiers, handleTiersUpdate]);
 
-  const handleTemplateChange = useCallback((newTemplate: Tier[]) => {
-    // Create a map of all existing items with their tier IDs
-    const allItemsMap = new Map(
-      tiers.flatMap(tier =>
-        tier.items.map(item => [item.id, {item, tierId: tier.id}])
-      )
-    );
-
-    // Create new tiers based on the template
-    const newTiers: Tier[] = newTemplate.map(templateTier => ({
-      ...templateTier,
-      items: [] as Item[],
-      labelPosition
-    }));
-
-    // Distribute existing items to new tiers
-    allItemsMap.forEach(({item, tierId}) => {
-      const targetTier = newTiers.find(tier => tier.id === tierId) ||
-        newTiers.find(tier => tier.id === 'uncategorized');
-
-      if (targetTier) {
-        targetTier.items.push(item);
-      } else {
-        // If no matching tier and no uncategorized tier, create one
-        const uncategorizedTier: Tier = {
-          id: 'uncategorized',
-          name: '',
-          items: [item],
-          labelPosition: labelPosition
-        };
-        newTiers.push(uncategorizedTier);
-      }
-    });
-
-    handleTiersUpdate(newTiers);
-  }, [tiers, labelPosition, handleTiersUpdate]);
-
+  
   const resetItems = useCallback(() => {
     previousTiersRef.current = tiers;
 
@@ -196,8 +163,7 @@ const TierListManager: React.FC<TierListManagerProps> = ({initialItemSet, initia
     labelPosition,
     showLabels,
     setLabelPosition: handleLabelPositionChange,
-    toggleLabels,
-    onTemplateChange: handleTemplateChange
+    toggleLabels
   };
 
   const UrlLengthWarning: React.FC<{ urlLength: number }> = ({urlLength}) => {
@@ -266,7 +232,6 @@ const TierListManager: React.FC<TierListManagerProps> = ({initialItemSet, initia
       </div>
       <div className="flex flex-col items-center hide-in-zen">
         <div className="flex space-x-2" id="settings" data-html2canvas-ignore>
-          <TierTemplateSelector/>
           <ItemManager
             onItemsCreate={handleItemsCreate}
             onUndoItemsCreate={handleUndoItemsCreate}
@@ -275,6 +240,7 @@ const TierListManager: React.FC<TierListManagerProps> = ({initialItemSet, initia
             undoReset={undoReset}
             undoDelete={undoDelete}
           />
+          <QuickDownloadButton title={name}/>
           <ShareButton title={name}/>
         </div>
         <div className="p-2" data-html2canvas-ignore>
